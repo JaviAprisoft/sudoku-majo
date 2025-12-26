@@ -96,19 +96,22 @@
         gap: 8px;
       }
 
-      .cell{ font-size: 18px; }
-
-      .key.num{
+      /* En móvil, botones más compactos para que entren completos */
+      #mobileKeypadSlot .key.num{
+        aspect-ratio: auto;
+        height: 56px;
         border-radius: 16px;
         font-size: 18px;
       }
 
-      .key.action{
+      #mobileKeypadSlot .key.action{
         height: 42px;
         border-radius: 999px;
         font-size: 11px;
         letter-spacing: .10em;
       }
+
+      .cell{ font-size: 18px; }
 
       /* Stats at the end on mobile */
       .side{ display:flex; flex-direction: column; }
@@ -271,7 +274,13 @@
       color: #991b1b;
     }
 
+    .cell.wrong{
+      background: rgba(239,68,68,.07);
+      color: #991b1b;
+    }
+
     .cell.flash{
+
       animation: flashError .35s ease;
     }
 
@@ -377,6 +386,14 @@
 
     .key:hover{ border-color: rgba(0,0,0,.18); }
     .key:active{ transform: translateY(1px); }
+
+    .key:disabled,
+    .key[aria-disabled="true"]{
+      opacity: .35;
+      cursor: not-allowed;
+      background: rgba(0,0,0,.02);
+    }
+    .key:disabled:hover{ border-color: rgba(0,0,0,.10); }
 
     .key.active{
       background: rgba(229,231,235,.9);
@@ -484,37 +501,45 @@
   // --- Puzzles (0 = vacío). Incluye solución para validar al instante.
   // Nota: Puedes añadir más fácilmente copiando pares puzzle/solution.
   const PUZZLES = {
-    // 0 = vacío. No incluimos la solución: validamos por reglas (conflictos) y completitud.
+    // 0 = vacío. Incluimos solución para poder marcar errores al instante sin autocompletar.
     easy: [
       {
         puzzle:   "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179"
       },
       {
         puzzle:   "006100000003020406080000072200800050000902000010004003560000080304090700000005900",
+        solution: "746138295913527486589649172237816954458972361619354823562713849384291567171485932"
       }
     ],
     medium: [
       {
         puzzle:   "000260701680070090190004500820100040004602900050003028009300074040050036703018000",
+        solution: "435269781682571493197834562826195347374682915951743628519326874248957136763418259"
       },
       {
         puzzle:   "200080300060070084030500209000105408000000000402706000301007040720040060004010003",
+        solution: "245981376169273584837564219976125438513498627482736951391657842728349165654812793"
       }
     ],
     hard: [
       {
         puzzle:   "000000907000420180000705026100904000050000040000507009920108000034059000507000000",
+        solution: "483651927765423189219785326176934852958216743342567519926178435834259671517342968"
       },
       {
         puzzle:   "030000080000306000007900004007010203000000000806040700100008900000709000050000040",
+        solution: "934527186218346579567981324497615238321874695856243791173458962642739815589162743"
       }
     ],
     expert: [
       {
         puzzle:   "000900002050123400030000010004000000000080000000000700060000040001374090500006000",
+        solution: "817943562956123487432567819684715923273489156195632748369851274121374695548296371"
       },
       {
         puzzle:   "000000000009805100051000000000000080000307000000000000000000940002109500700000000",
+        solution: "847631259239875164651924378923546781165387492478219653516752943382149567794863125"
       }
     ]
   };
@@ -547,6 +572,7 @@
     seed: 0,
     puzzleIndex: 0,
     puzzle: null,
+    solution: null,
     given: new Array(81).fill(false),
     values: new Array(81).fill(0),
     selected: -1,
@@ -876,7 +902,24 @@
     els.winToast.classList.toggle('show', solvedNow);
     
     // Número a resaltar: prioridad al activo (keypad/teclado), si no al valor de la celda seleccionada
-    const highlightN = getHighlightNumber();
+    // Conteo de números para desactivar botones cuando ya hay 9 colocados
+    const counts = new Array(10).fill(0);
+    for(const v of state.values){ if(v > 0) counts[v] += 1; }
+
+    // Si el número activo ya está completo (9/9), lo soltamos.
+    if(state.activeNumber > 0 && counts[state.activeNumber] >= 9){
+      state.activeNumber = 0;
+    }
+
+    let highlightN = getHighlightNumber();
+
+    // Desactivar botones 1–9 cuando el número ya está completo
+    [...els.keypad.querySelectorAll('.key.num')].forEach(btn => {
+      const n = Number(btn.dataset.n);
+      const done = counts[n] >= 9;
+      btn.disabled = done;
+      btn.setAttribute('aria-disabled', done ? 'true' : 'false');
+    });
 
     // Keypad active
     [...els.keypad.querySelectorAll('.key')].forEach(k => {
@@ -931,6 +974,10 @@
       const hasConflict = conflicts.has(i) && v !== 0;
       cell.classList.toggle('conflict', hasConflict);
 
+      // Wrong vs solution (instant correctness) — aunque no haya conflicto.
+      const wrong = (!isGiven && v !== 0 && state.solution) ? (v !== Number(state.solution[i])) : false;
+      cell.classList.toggle('wrong', wrong && !hasConflict);
+
       // Explicación del conflicto vinculado a la celda seleccionada
       cell.classList.toggle('conflict-peer', explainOn && (i === state.selected || explainPeers.has(i)));
 
@@ -962,6 +1009,14 @@
   // --- Interaction
   function selectCell(i){
     state.selected = i;
+
+    // Evita que se "quede" el resaltado anterior: si hay un número activo
+    // (por keypad/teclado) y seleccionas una celda con otro valor, soltamos el activo.
+    const v = state.values[i] || 0;
+    if(v > 0 && state.activeNumber > 0 && state.activeNumber !== v){
+      state.activeNumber = 0;
+    }
+
     render();
   }
 
@@ -987,10 +1042,14 @@
     const before = state.values[i];
     state.values[i] = n;
 
-    // Fallo solo cuando introduces un valor (no al borrar) y el valor genera conflicto inmediato.
+    // Fallo cuando introduces un valor (no al borrar) y:
+    // - entra en conflicto por reglas, o
+    // - no coincide con la solución (aunque no haya conflicto)
     if(n !== 0 && n !== before){
       const conflictPeers = getConflictPeers(i, n);
-      if(conflictPeers.length){
+      const correct = state.solution ? (n === Number(state.solution[i])) : true;
+
+      if(conflictPeers.length || !correct){
         state.mistakes += 1;
         flashCells([i, ...conflictPeers]);
       } else {
@@ -1042,7 +1101,16 @@
   }
 
   function checkSolved(){
-    // Resuelto si: todo relleno y cada fila/col/box contiene 1..9 sin duplicados.
+    // Si tenemos solución, resuelto si coincide exacto.
+    if(state.solution){
+      if(state.values.some(v => v === 0)) return false;
+      for(let i=0;i<81;i++){
+        if(state.values[i] !== Number(state.solution[i])) return false;
+      }
+      return true;
+    }
+
+    // Fallback por reglas (sin solución): todo relleno y unidades válidas.
     if(state.values.some(v => v === 0)) return false;
     const okUnit = (arr) => {
       const s = new Set(arr);
@@ -1051,21 +1119,16 @@
       return true;
     };
 
-    // Filas
     for(let r=0;r<9;r++){
       const row = [];
       for(let c=0;c<9;c++) row.push(state.values[idxRC(r,c)]);
       if(!okUnit(row)) return false;
     }
-
-    // Columnas
     for(let c=0;c<9;c++){
       const col = [];
       for(let r=0;r<9;r++) col.push(state.values[idxRC(r,c)]);
       if(!okUnit(col)) return false;
     }
-
-    // Cajas 3x3
     for(let br=0;br<3;br++){
       for(let bc=0;bc<3;bc++){
         const box = [];
@@ -1075,7 +1138,6 @@
         if(!okUnit(box)) return false;
       }
     }
-
     return true;
   }
 
@@ -1094,6 +1156,11 @@
 
     if(key >= '1' && key <= '9'){
       const n = Number(key);
+      // Si el número ya está completo (9/9), no lo permitimos
+      let cnt = 0;
+      for(const v of state.values){ if(v === n) cnt += 1; }
+      if(cnt >= 9) return;
+
       setActiveNumber(n);
       applyNumberToSelected(n);
       return;
@@ -1131,13 +1198,19 @@
   function loadPuzzleFromSeed(difficulty, seed, puzzleIndexOverride = null, puzzleOverride = null){
     const list = PUZZLES[difficulty] || PUZZLES.easy;
     const idx = (puzzleIndexOverride == null) ? seedToIndex(seed, list.length) : Math.max(0, Math.min(list.length - 1, puzzleIndexOverride));
-    const pick = puzzleOverride ? { puzzle: puzzleOverride } : list[idx];
+
+    let pick = list[idx];
+    if(puzzleOverride){
+      const found = list.find(x => x.puzzle === puzzleOverride);
+      pick = found || { puzzle: puzzleOverride, solution: null };
+    }
 
     state.difficulty = difficulty;
     els.difficulty.value = difficulty;
     state.seed = (seed >>> 0);
     state.puzzleIndex = idx;
     state.puzzle = pick.puzzle;
+    state.solution = pick.solution || null;
 
     state.given = new Array(81).fill(false);
     state.values = new Array(81).fill(0);
