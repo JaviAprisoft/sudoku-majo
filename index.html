@@ -297,6 +297,67 @@
     }
     .toast.show{ display:block; }
 
+    /* Win screen */
+    .win-screen{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(17,24,39,.35);
+      z-index: 20;
+    }
+    .win-screen.show{ display: flex; }
+
+    .win-card{
+      width: min(520px, 100%);
+      background: var(--card);
+      border-radius: 22px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      text-align: center;
+      display: grid;
+      gap: 12px;
+      animation: winIn 180ms var(--ease);
+    }
+    .win-badge{
+      width: 56px;
+      height: 56px;
+      margin: 0 auto;
+      border-radius: 18px;
+      background: rgba(17,24,39,.06);
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+    }
+    .win-card h2{
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: .02em;
+    }
+    .win-stats{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .win-stats strong{ color: var(--text); }
+    .win-actions{
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .win-actions button{ min-width: 140px; }
+    @keyframes winIn{
+      from{ transform: translateY(6px) scale(.98); opacity: .6; }
+      to{ transform: translateY(0) scale(1); opacity: 1; }
+    }
+
     .sr{ position:absolute; left:-9999px; }
 
     /* Mobile-first polish */
@@ -385,13 +446,28 @@
         <div class="hint">
           • Click en una casilla y usa el teclado (1–9) o el panel inferior.<br>
           • Se resaltan los iguales del número activo o de la casilla seleccionada.<br>
-          • Se marca error instantáneo si el movimiento es incorrecto (aunque no genere conflicto).
+          • El error se marca en rojo de forma breve si el movimiento es incorrecto.
         </div>
 
         <div id="winToast" class="toast">✅ Sudoku completado. ¡Perfecto!</div>
       </div>
     </div>
 
+  </div>
+
+  <div id="winScreen" class="win-screen" aria-hidden="true">
+    <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+      <div class="win-badge">🎉</div>
+      <h2 id="winTitle">¡Sudoku completado!</h2>
+      <div class="win-stats">
+        <span>Tiempo: <strong id="winTime">00:00</strong></span>
+        <span>Fallos: <strong id="winMistakes">0</strong></span>
+      </div>
+      <div class="win-actions">
+        <button id="winNewGame" class="btn-primary">Nueva partida</button>
+        <button id="winClose" class="btn-ghost">Seguir mirando</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -472,6 +548,11 @@
     timer: document.getElementById('timer'),
     best: document.getElementById('best'),
     winToast: document.getElementById('winToast'),
+    winScreen: document.getElementById('winScreen'),
+    winTime: document.getElementById('winTime'),
+    winMistakes: document.getElementById('winMistakes'),
+    winNewGame: document.getElementById('winNewGame'),
+    winClose: document.getElementById('winClose'),
   };
 
   const LS = {
@@ -702,6 +783,20 @@
     return true;
   }
 
+  function showWinScreen(){
+    if(!els.winScreen) return;
+    if(els.winTime) els.winTime.textContent = formatTime(state.elapsed);
+    if(els.winMistakes) els.winMistakes.textContent = String(state.mistakes);
+    els.winScreen.classList.add('show');
+    els.winScreen.setAttribute('aria-hidden', 'false');
+  }
+
+  function hideWinScreen(){
+    if(!els.winScreen) return;
+    els.winScreen.classList.remove('show');
+    els.winScreen.setAttribute('aria-hidden', 'true');
+  }
+
   // --- Rendering
   function buildBoard(){
     els.board.innerHTML = '';
@@ -847,24 +942,13 @@
         const b2 = getBestSeconds(state.difficulty);
         els.best.textContent = b2 == null ? '—' : formatTime(b2);
       }
+      showWinScreen();
+    }
+    if(!solvedNow && state.solved){
+      hideWinScreen();
     }
     state.solved = solvedNow;
     els.winToast.classList.toggle('show', solvedNow);
-
-    const conflicts = computeConflicts(state.values);
-
-    // Explain conflict peers for selected (más explicativo)
-    const explainPeers = new Set();
-    let explainOn = false;
-    if(state.selected >= 0){
-      const sv = state.values[state.selected];
-      if(sv > 0){
-        for(const p of peersOf(state.selected)){
-          if(state.values[p] === sv) explainPeers.add(p);
-        }
-        explainOn = explainPeers.size > 0;
-      }
-    }
 
     const cells = els.board.querySelectorAll('.cell');
     for(const cell of cells){
@@ -886,14 +970,6 @@
 
       const same = highlightN > 0 && v === highlightN;
       cell.classList.toggle('same', same);
-
-      const hasConflict = conflicts.has(i) && v !== 0;
-      cell.classList.toggle('conflict', hasConflict);
-
-      const wrong = (!isGiven && v !== 0) ? !!state.wrong[i] : false;
-      cell.classList.toggle('wrong', wrong && !hasConflict);
-
-      cell.classList.toggle('conflict-peer', explainOn && (i === state.selected || explainPeers.has(i)));
 
       const val = cell.querySelector('.val');
       if(val) val.textContent = v === 0 ? '' : String(v);
@@ -996,6 +1072,11 @@
   // Keyboard
   window.addEventListener('keydown', (e) => {
     const key = e.key;
+
+    if(els.winScreen && els.winScreen.classList.contains('show')){
+      if(key === 'Escape') hideWinScreen();
+      return;
+    }
 
     if(key === 'Escape'){
       state.selected = -1;
@@ -1193,6 +1274,7 @@
 
   // --- Game lifecycle (elige SIEMPRE puzzle con solución única)
   function loadPuzzleFromSeed(difficulty, seed, puzzleIndexOverride = null, puzzleOverride = null){
+    hideWinScreen();
     const list = (PUZZLES[difficulty] && PUZZLES[difficulty].length) ? PUZZLES[difficulty] : PUZZLES.easy;
     let idx = (puzzleIndexOverride == null)
       ? seedToIndex(seed, list.length)
@@ -1298,6 +1380,7 @@
 
   function resetToOriginal(){
     if(!state.puzzle) return;
+    hideWinScreen();
 
     state.values = new Array(81).fill(0);
     state.given = new Array(81).fill(false);
@@ -1357,6 +1440,18 @@
     els.share.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar';
     setTimeout(() => { els.share.textContent = prev; }, 900);
   });
+
+  if(els.winNewGame){
+    els.winNewGame.addEventListener('click', () => loadRandomPuzzle(els.difficulty.value));
+  }
+  if(els.winClose){
+    els.winClose.addEventListener('click', hideWinScreen);
+  }
+  if(els.winScreen){
+    els.winScreen.addEventListener('click', (e) => {
+      if(e.target === els.winScreen) hideWinScreen();
+    });
+  }
 
   window.addEventListener('resize', () => {
     clearTimeout(window.__rt);
