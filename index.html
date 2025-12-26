@@ -83,15 +83,20 @@
       .content{ padding: 12px 12px 14px; }
       .side{ padding: 12px 12px 14px; }
 
+      /* Make board + keypad fit in one view */
       .board{
-        max-width: 92vw;
+        max-width: 88vw;
         margin: 0 auto;
         border-radius: 12px;
       }
 
-      .cell{ font-size: 18px; }
+      #mobileKeypadSlot .keypad{
+        max-width: 88vw;
+        margin: 10px auto 0;
+        gap: 8px;
+      }
 
-      .keypad{ gap: 8px; }
+      .cell{ font-size: 18px; }
 
       .key.num{
         border-radius: 16px;
@@ -105,7 +110,12 @@
         letter-spacing: .10em;
       }
 
-      .hint{ font-size: 12px; }
+      /* Stats at the end on mobile */
+      .side{ display:flex; flex-direction: column; }
+      .keypad-slot{ order: 1; }
+      .hint{ order: 2; font-size: 12px; }
+      #winToast{ order: 3; }
+      .meta{ order: 4; }
     }
 
     .card{
@@ -420,7 +430,7 @@
       <div class="header">
         <div class="brand">
           <h1>Sudoku</h1>
-          <div class="tag">clean · minimalist</div>
+          <div class="tag">Bizcochito</div>
         </div>
 
         <div class="controls">
@@ -439,6 +449,7 @@
 
       <div class="content">
         <div id="board" class="board" aria-label="Tablero de Sudoku"></div>
+        <div id="mobileKeypadSlot" aria-label="Teclado (móvil)"></div>
       </div>
     </div>
 
@@ -452,7 +463,9 @@
           <div class="pill">Mejor: <strong id="best">—</strong></div>
         </div>
 
-        <div class="keypad" id="keypad"></div>
+        <div id="desktopKeypadSlot" class="keypad-slot">
+          <div class="keypad" id="keypad"></div>
+        </div>
 
         <div class="hint">
           • Click en una casilla y usa el teclado numérico o el teclado físico (1–9).<br>
@@ -618,6 +631,33 @@
     state.elapsed = sec;
     els.timer.textContent = formatTime(state.elapsed);
     startTimer();
+
+  // Move keypad into the board card on mobile so it fits in the same view.
+  const desktopKeypadSlot = document.getElementById('desktopKeypadSlot');
+  const mobileKeypadSlot = document.getElementById('mobileKeypadSlot');
+
+  function placeKeypadForViewport(){
+    const isMobile = window.matchMedia('(max-width: 720px)').matches;
+    const keypad = els.keypad;
+    if(!keypad) return;
+
+    if(isMobile){
+      if(mobileKeypadSlot && keypad.parentElement !== mobileKeypadSlot){
+        mobileKeypadSlot.appendChild(keypad);
+      }
+    } else {
+      if(desktopKeypadSlot && keypad.parentElement !== desktopKeypadSlot){
+        desktopKeypadSlot.appendChild(keypad);
+      }
+    }
+  }
+
+  placeKeypadForViewport();
+  let _rt = null;
+  window.addEventListener('resize', () => {
+    if(_rt) clearTimeout(_rt);
+    _rt = setTimeout(placeKeypadForViewport, 120);
+  });
   }
 
   function scheduleCheckpointSave(){
