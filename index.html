@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sudoku · Minimal</title>
+  <style>
+    :root{
+      --t: 140ms;
+      --ease: cubic-bezier(.2,.8,.2,1);
+      --bg: #f6f6f7;           /* Apple-ish light gray */
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --line-strong: #9ca3af;
+      --focus: #e5e7eb;
+      --focus-strong: #d1d5db;
+      --accent: #111827;
+      --error: #ef4444;
+      --error-bg: rgba(239,68,68,.08);
+      --ok: #16a34a;
+      --shadow: 0 10px 30px rgba(0,0,0,.06);
+      --radius: 18px;
+    }
+
+    *{ box-sizing: border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .wrap{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 18px 40px;
+      display: grid;
+      gap: 18px;
+      grid-template-columns: 1.2fr .8fr;
+    }
+
+    @media (max-width: 900px){
+      .wrap{ grid-template-columns: 1fr; }
+    }
+
+    /* Mobile-first polish */
+    @media (max-width: 720px){
+      body{ background: #f3f4f6; }
+
+      .wrap{
+        padding: 14px 12px 22px;
+        gap: 12px;
+      }
+
+      .card{ border-radius: 16px; }
+
+      .header{
+        padding: 14px 14px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .controls{
+        width: 100%;
+        justify-content: flex-start;
+        gap: 8px;
+      }
+
+      .controls select,
+      .controls button{
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+
+      .controls #newGame{ flex: 1 1 auto; }
+      .controls #reset{ flex: 1 1 auto; }
+      .controls #share{ flex: 1 1 auto; }
+
+      .content{ padding: 12px 12px 14px; }
+      .side{ padding: 12px 12px 14px; }
+
+      .board{
+        max-width: 92vw;
+        margin: 0 auto;
+        border-radius: 12px;
+      }
+
+      .cell{ font-size: 18px; }
+
+      .keypad{ gap: 8px; }
+
+      .key.num{
+        border-radius: 16px;
+        font-size: 18px;
+      }
+
+      .key.action{
+        height: 42px;
+        border-radius: 999px;
+        font-size: 11px;
+        letter-spacing: .10em;
+      }
+
+      .hint{ font-size: 12px; }
+    }
+
+    .card{
+      background: var(--card);
+      border: 1px solid rgba(0,0,0,.04);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .header{
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(0,0,0,.05);
+    }
+
+    .brand{
+      display:flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size: 18px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .brand .tag{
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .controls{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    select, button{
+      appearance: none;
+      border: 1px solid rgba(0,0,0,.10);
+      background: #fff;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      transition: transform var(--t) var(--ease), background var(--t) var(--ease), border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+      outline: none;
+    }
+
+    select{
+      padding-right: 34px;
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%),
+        linear-gradient(to right, transparent, transparent);
+      background-position:
+        calc(100% - 18px) calc(50% - 2px),
+        calc(100% - 12px) calc(50% - 2px),
+        calc(100% - 2.4em) 0.5em;
+      background-size:
+        6px 6px,
+        6px 6px,
+        1px 1.5em;
+      background-repeat: no-repeat;
+    }
+
+    button:hover, select:hover{ border-color: rgba(0,0,0,.18); }
+    button:active{ transform: translateY(1px); }
+
+    .btn-ghost{
+      background: rgba(0,0,0,.02);
+    }
+
+    .btn-primary{
+      background: var(--text);
+      color: #fff;
+      border-color: rgba(0,0,0,.35);
+    }
+
+    .content{ padding: 18px 18px 22px; }
+
+    /* Board */
+    .board{
+      width: 100%;
+      aspect-ratio: 1/1;
+      display:grid;
+      grid-template-columns: repeat(9, 1fr);
+      border: 2px solid var(--line-strong);
+      border-radius: 14px;
+      overflow: hidden;
+      user-select: none;
+      background:#fff;
+    }
+
+    .cell{
+      position: relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      background: #fff;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      transition: background var(--t) var(--ease), color var(--t) var(--ease), transform var(--t) var(--ease), box-shadow var(--t) var(--ease);
+    }
+
+    .cell .val{
+      line-height: 1;
+      transform: translateY(1px);
+    }
+
+    .cell:nth-child(9n){ border-right: none; }
+    .cell:nth-last-child(-n + 9){ border-bottom: none; }
+
+    /* Stronger 3x3 separators */
+    .cell.sep-r{ border-right: 2px solid var(--line-strong); }
+    .cell.sep-b{ border-bottom: 2px solid var(--line-strong); }
+
+    .cell.given{
+      font-weight: 700;
+      color: #111827;
+      background: rgba(0,0,0,.02);
+      cursor: default;
+    }
+
+    /* Selection + constraints lane highlight */
+    .cell.selected{ background: var(--focus); }
+    .cell.selected.same{ box-shadow: inset 0 0 0 2px rgba(0,0,0,.14); }
+.cell.lane{ background: rgba(229,231,235,.78); } /* row/col lane (soft, but visible) */
+
+    /* Same-number highlight */
+    .cell.same{ background: rgba(17,24,39,.075); }
+
+    /* Conflict / wrong */
+    .cell.conflict{
+      background: rgba(239,68,68,.10);
+      color: #991b1b;
+    }
+
+    .cell.flash{
+      animation: flashError .35s ease;
+    }
+
+    @keyframes flashError{
+      0%{ background: rgba(239,68,68,.20); }
+      100%{ background: rgba(239,68,68,.10); }
+    }
+
+    .cell.pop{
+      animation: popOk 140ms var(--ease);
+    }
+
+    @keyframes popOk{
+      0%{ transform: scale(.98); }
+      100%{ transform: scale(1); }
+    }
+
+    .cell.conflict-peer{
+      box-shadow: inset 0 0 0 2px rgba(239,68,68,.28);
+    }
+
+    .cell .mini{
+
+      position:absolute;
+      top: 7px;
+      right: 8px;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.15);
+      opacity: 0;
+    }
+
+    .cell.selected .mini{
+      opacity: 1;
+      background: rgba(0,0,0,.22);
+    }
+
+    /* Sidebar */
+    .side{
+      padding: 18px 18px 22px;
+      display:flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .meta{
+      display:flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill{
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,.08);
+      background: rgba(0,0,0,.02);
+      font-size: 13px;
+      color: var(--muted);
+      display:flex;
+      align-items:center;
+      gap: 8px;
+    }
+
+    .pill strong{ color: var(--text); font-weight: 700; }
+
+    .keypad{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .key{
+      position: relative;
+      height: 54px;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,.10);
+      background: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor: pointer;
+      transition: transform var(--t) var(--ease), background var(--t) var(--ease), border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+      user-select: none;
+      min-width: 0;
+    }
+
+    .key.num{
+      aspect-ratio: 1 / 1;
+      height: auto;
+      border-radius: 18px;
+    }
+
+    .key.action{
+      height: 44px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: .10em;
+    }
+
+    .key:hover{ border-color: rgba(0,0,0,.18); }
+    .key:active{ transform: translateY(1px); }
+
+    .key.active{
+      background: rgba(229,231,235,.9);
+      border-color: rgba(0,0,0,.20);
+    }
+
+    .key.active::after{
+      content:"";
+      position:absolute;
+      bottom: 10px;
+      width: 18px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.35);
+    }
+
+    .key.small{
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .hint{
+      margin-top: 6px;
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .toast{
+      display:none;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(22,163,74,.18);
+      background: rgba(22,163,74,.08);
+      color: #166534;
+      font-size: 13px;
+    }
+
+    .toast.show{ display:block; }
+
+    .sr{ position:absolute; left:-9999px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="card">
+      <div class="header">
+        <div class="brand">
+          <h1>Sudoku</h1>
+          <div class="tag">clean · minimalist</div>
+        </div>
+
+        <div class="controls">
+          <label class="sr" for="difficulty">Dificultad</label>
+          <select id="difficulty">
+            <option value="easy">Fácil</option>
+            <option value="medium">Media</option>
+            <option value="hard">Difícil</option>
+            <option value="expert">Experta</option>
+          </select>
+          <button id="newGame" class="btn-primary">Nueva</button>
+          <button id="reset" class="btn-ghost">Reiniciar</button>
+          <button id="share" class="btn-ghost">Copiar link</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div id="board" class="board" aria-label="Tablero de Sudoku"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="side">
+        <div class="meta">
+          <div class="pill">Dificultad: <strong id="difficultyLabel">Fácil</strong></div>
+          <div class="pill">Fallos: <strong id="mistakes">0</strong></div>
+          <div class="pill">Rellenas: <strong id="filled">0</strong>/81</div>
+          <div class="pill">Tiempo: <strong id="timer">00:00</strong></div>
+          <div class="pill">Mejor: <strong id="best">—</strong></div>
+        </div>
+
+        <div class="keypad" id="keypad"></div>
+
+        <div class="hint">
+          • Click en una casilla y usa el teclado numérico o el teclado físico (1–9).<br>
+          • Al seleccionar un número, se resaltan los iguales. La casilla activa marca un punto y se sombrean su fila/columna en gris “Apple”.<br>
+          • El error se marca al instante: si el número entra en conflicto (duplicado en fila/columna/caja).
+        </div>
+
+        <div id="winToast" class="toast">✅ Sudoku completado. ¡Perfecto!</div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(() => {
+  // --- Puzzles (0 = vacío). Incluye solución para validar al instante.
+  // Nota: Puedes añadir más fácilmente copiando pares puzzle/solution.
+  const PUZZLES = {
+    // 0 = vacío. No incluimos la solución: validamos por reglas (conflictos) y completitud.
+    easy: [
+      {
+        puzzle:   "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
+      },
+      {
+        puzzle:   "006100000003020406080000072200800050000902000010004003560000080304090700000005900",
+      }
+    ],
+    medium: [
+      {
+        puzzle:   "000260701680070090190004500820100040004602900050003028009300074040050036703018000",
+      },
+      {
+        puzzle:   "200080300060070084030500209000105408000000000402706000301007040720040060004010003",
+      }
+    ],
+    hard: [
+      {
+        puzzle:   "000000907000420180000705026100904000050000040000507009920108000034059000507000000",
+      },
+      {
+        puzzle:   "030000080000306000007900004007010203000000000806040700100008900000709000050000040",
+      }
+    ],
+    expert: [
+      {
+        puzzle:   "000900002050123400030000010004000000000080000000000700060000040001374090500006000",
+      },
+      {
+        puzzle:   "000000000009805100051000000000000080000307000000000000000000940002109500700000000",
+      }
+    ]
+  };
+
+  const els = {
+    board: document.getElementById('board'),
+    keypad: document.getElementById('keypad'),
+    difficulty: document.getElementById('difficulty'),
+    difficultyLabel: document.getElementById('difficultyLabel'),
+    newGame: document.getElementById('newGame'),
+    reset: document.getElementById('reset'),
+    share: document.getElementById('share'),
+    mistakes: document.getElementById('mistakes'),
+    filled: document.getElementById('filled'),
+    timer: document.getElementById('timer'),
+    best: document.getElementById('best'),
+    winToast: document.getElementById('winToast'),
+  };
+
+  const LS = {
+    checkpoint: 'sudoku_checkpoint_v1',
+    bestPrefix: 'sudoku_best_',
+  };
+
+  let timerInterval = null;
+  let saveTimer = null;
+
+  let state = {
+    difficulty: 'easy',
+    seed: 0,
+    puzzleIndex: 0,
+    puzzle: null,
+    given: new Array(81).fill(false),
+    values: new Array(81).fill(0),
+    selected: -1,
+    activeNumber: 0,
+    mistakes: 0,
+    elapsed: 0,      // seconds
+    solved: false,
+  };
+
+  // --- Helpers
+  const idxRC = (r,c) => r*9+c;
+  const rcFromIdx = (i) => [Math.floor(i/9), i%9];
+
+  function rowOf(i){ return Math.floor(i/9); }
+  function colOf(i){ return i%9; }
+  function boxOf(i){
+    const r = rowOf(i), c = colOf(i);
+    return Math.floor(r/3)*3 + Math.floor(c/3);
+  }
+
+  function peersOf(i){
+    const r = rowOf(i), c = colOf(i);
+    const br = Math.floor(r/3)*3;
+    const bc = Math.floor(c/3)*3;
+    const set = new Set();
+
+    for(let cc=0; cc<9; cc++) set.add(idxRC(r,cc));
+    for(let rr=0; rr<9; rr++) set.add(idxRC(rr,c));
+    for(let rr=br; rr<br+3; rr++) for(let cc=bc; cc<bc+3; cc++) set.add(idxRC(rr,cc));
+
+    set.delete(i);
+    return [...set];
+  }
+
+  function prettyDifficulty(d){
+    return ({easy:'Fácil', medium:'Media', hard:'Difícil', expert:'Experta'})[d] || d;
+  }
+
+  function formatTime(sec){
+    const s = Math.max(0, Math.floor(sec));
+    const mm = String(Math.floor(s / 60)).padStart(2,'0');
+    const ss = String(s % 60).padStart(2,'0');
+    return `${mm}:${ss}`;
+  }
+
+  function randomSeed(){
+    try{
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      return a[0] >>> 0;
+    } catch {
+      return (Math.random() * 0xFFFFFFFF) >>> 0;
+    }
+  }
+
+  function seedToIndex(seed, len){
+    if(!len) return 0;
+    return (seed >>> 0) % len;
+  }
+
+  function getBestSeconds(difficulty){
+    const raw = localStorage.getItem(LS.bestPrefix + difficulty);
+    const n = raw == null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function setBestSeconds(difficulty, sec){
+    localStorage.setItem(LS.bestPrefix + difficulty, String(sec));
+  }
+
+  function startTimer(){
+    if(timerInterval) return;
+    timerInterval = setInterval(() => {
+      if(state.solved) return;
+      state.elapsed += 1;
+      // Actualizamos solo el texto del timer para evitar parpadeos
+      els.timer.textContent = formatTime(state.elapsed);
+    }, 1000);
+  }
+
+  function resetTimer(sec = 0){
+    state.elapsed = sec;
+    els.timer.textContent = formatTime(state.elapsed);
+    startTimer();
+  }
+
+  function scheduleCheckpointSave(){
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveCheckpoint, 250);
+  }
+
+  function saveCheckpoint(){
+    try{
+      const payload = {
+        v: 1,
+        difficulty: state.difficulty,
+        seed: state.seed >>> 0,
+        puzzleIndex: state.puzzleIndex ?? 0,
+        puzzle: state.puzzle,
+        values: state.values.join(''),
+        elapsed: state.elapsed,
+      };
+      localStorage.setItem(LS.checkpoint, JSON.stringify(payload));
+    } catch {}
+  }
+
+  function loadCheckpoint(){
+    try{
+      const raw = localStorage.getItem(LS.checkpoint);
+      if(!raw) return false;
+      const data = JSON.parse(raw);
+      if(!data || !data.puzzle || !data.difficulty) return false;
+      loadPuzzleFromSeed(data.difficulty, data.seed ?? 0, data.puzzleIndex ?? null, data.puzzle);
+      if(typeof data.values === 'string' && data.values.length === 81){
+        applyValuesString(data.values);
+      }
+      resetTimer(Number(data.elapsed) || 0);
+      render();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function parseHash(){
+    const h = (location.hash || '').replace(/^#/, '');
+    if(!h) return null;
+    const sp = new URLSearchParams(h);
+    const d = sp.get('d');
+    const s = sp.get('s');
+    const i = sp.get('i');
+    const v = sp.get('v');
+    const t = sp.get('t');
+    if(!d || s == null) return null;
+    return {
+      difficulty: d,
+      seed: (Number(s) >>> 0),
+      puzzleIndex: i == null ? null : (Number(i) | 0),
+      values: v,
+      elapsed: t == null ? null : Number(t),
+    };
+  }
+
+  function encodeHash(){
+    const sp = new URLSearchParams();
+    sp.set('d', state.difficulty);
+    sp.set('s', String(state.seed >>> 0));
+    sp.set('i', String(state.puzzleIndex ?? 0));
+    sp.set('v', state.values.join(''));
+    sp.set('t', String(state.elapsed));
+    return '#' + sp.toString();
+  }
+
+  async function copyToClipboard(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly','');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  function loadFromUrl(){
+    const parsed = parseHash();
+    if(!parsed) return false;
+
+    const diff = PUZZLES[parsed.difficulty] ? parsed.difficulty : 'easy';
+    loadPuzzleFromSeed(diff, parsed.seed, parsed.puzzleIndex);
+
+    if(typeof parsed.values === 'string' && parsed.values.length === 81){
+      applyValuesString(parsed.values);
+    }
+
+    resetTimer(Number.isFinite(parsed.elapsed) ? parsed.elapsed : 0);
+    render();
+    return true;
+  }
+
+  // --- Rendering
+  function buildBoard(){
+    els.board.innerHTML = '';
+
+    for(let i=0;i<81;i++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.i = String(i);
+
+      // Add 3x3 separators
+      const r = rowOf(i), c = colOf(i);
+      if(c === 2 || c === 5) cell.classList.add('sep-r');
+      if(r === 2 || r === 5) cell.classList.add('sep-b');
+
+      // Value element (explicit, avoids querySelector('span') ambiguity)
+      const val = document.createElement('div');
+      val.className = 'val';
+      cell.appendChild(val);
+
+      // Selection marker
+      const mini = document.createElement('div');
+      mini.className = 'mini';
+      cell.appendChild(mini);
+
+      cell.addEventListener('click', () => {
+        selectCell(i);
+      });
+
+      els.board.appendChild(cell);
+    }
+  }
+
+  function buildKeypad(){
+    els.keypad.innerHTML = '';
+
+    for(let n=1;n<=9;n++){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'key num';
+      btn.textContent = String(n);
+      btn.dataset.n = String(n);
+      btn.addEventListener('click', () => {
+        setActiveNumber(n);
+        // UX: si hay celda seleccionada, aplicar el número directamente.
+        applyNumberToSelected(n);
+      });
+      els.keypad.appendChild(btn);
+    }
+
+    const erase = document.createElement('button');
+    erase.type = 'button';
+    erase.className = 'key action';
+    erase.textContent = 'Borrar';
+    erase.addEventListener('click', () => {
+      setActiveNumber(0);
+      applyNumberToSelected(0);
+    });
+    els.keypad.appendChild(erase);
+
+    const clearSel = document.createElement('button');
+    clearSel.type = 'button';
+    clearSel.className = 'key action';
+    clearSel.textContent = 'Deseleccionar';
+    clearSel.addEventListener('click', () => {
+      state.selected = -1;
+      render();
+    });
+    els.keypad.appendChild(clearSel);
+
+    const revealActive = document.createElement('button');
+    revealActive.type = 'button';
+    revealActive.className = 'key action';
+    revealActive.textContent = 'Resaltar';
+    revealActive.title = 'Resalta los iguales del número de la casilla seleccionada';
+    revealActive.addEventListener('click', () => {
+      if(state.selected >= 0){
+        const v = state.values[state.selected] || 0;
+        setActiveNumber(v);
+      }
+    });
+    els.keypad.appendChild(revealActive);
+  }
+
+  function render(){
+    // Difficulty label + stats
+    els.difficultyLabel.textContent = prettyDifficulty(state.difficulty);
+    els.mistakes.textContent = String(state.mistakes);
+
+    const filledCount = state.values.filter(v => v !== 0).length;
+    els.filled.textContent = String(filledCount);
+
+    // Timer + best
+    els.timer.textContent = formatTime(state.elapsed);
+    const bestSec = getBestSeconds(state.difficulty);
+    els.best.textContent = bestSec == null ? '—' : formatTime(bestSec);
+
+    // Win toast + best time update (sin revelar solución)
+    const solvedNow = checkSolved();
+    if(solvedNow && !state.solved){
+      state.solved = true;
+      const prevBest = getBestSeconds(state.difficulty);
+      if(prevBest == null || state.elapsed < prevBest){
+        setBestSeconds(state.difficulty, state.elapsed);
+      }
+      // refresh best display
+      const b2 = getBestSeconds(state.difficulty);
+      els.best.textContent = b2 == null ? '—' : formatTime(b2);
+    }
+    els.winToast.classList.toggle('show', solvedNow);
+    
+    // Número a resaltar: prioridad al activo (keypad/teclado), si no al valor de la celda seleccionada
+    const highlightN = getHighlightNumber();
+
+    // Keypad active
+    [...els.keypad.querySelectorAll('.key')].forEach(k => {
+      const n = Number(k.dataset.n || -1);
+      k.classList.toggle('active', n === highlightN && n > 0);
+    });
+
+    // Board cells
+    const cells = els.board.querySelectorAll('.cell');
+
+    // Precompute conflicts for the whole board (duplicates)
+    const conflicts = computeConflicts(); // Set of indices
+
+    // Conflictos explicativos: si la celda seleccionada entra en conflicto,
+    // resalta también las celdas que lo causan.
+    const explainPeers = new Set();
+    let explainOn = false;
+    if(state.selected >= 0){
+      const sv = state.values[state.selected];
+      if(sv > 0){
+        for(const p of peersOf(state.selected)){
+          if(state.values[p] === sv) explainPeers.add(p);
+        }
+        explainOn = explainPeers.size > 0;
+      }
+    }
+
+    for(const cell of cells){
+      const i = Number(cell.dataset.i);
+      const v = state.values[i];
+      const isGiven = state.given[i];
+      const isSelected = i === state.selected;
+
+      cell.classList.toggle('given', isGiven);
+      cell.classList.toggle('selected', isSelected);
+
+      // Lane highlight (row/col of selected)
+      if(state.selected >= 0){
+        const sr = rowOf(state.selected), sc = colOf(state.selected);
+        const r = rowOf(i), c = colOf(i);
+        cell.classList.toggle('lane', (r===sr || c===sc) && !isSelected);
+      } else {
+        cell.classList.remove('lane');
+      }
+
+      // Same-number highlight
+      const active = highlightN;
+      const same = active > 0 && v === active;
+      cell.classList.toggle('same', same);
+
+      // Conflicts (duplicate number in row/col/box)
+      const hasConflict = conflicts.has(i) && v !== 0;
+      cell.classList.toggle('conflict', hasConflict);
+
+      // Explicación del conflicto vinculado a la celda seleccionada
+      cell.classList.toggle('conflict-peer', explainOn && (i === state.selected || explainPeers.has(i)));
+
+
+
+      // Content
+      // Keep mini dot already appended, so set text via dataset and pseudo? We'll set text node in a span.
+      const val = cell.querySelector('.val');
+      if(val) val.textContent = v === 0 ? '' : String(v);
+    }
+  }
+
+  function computeConflicts(){
+    const conflicts = new Set();
+    // For each filled cell, check duplicates among peers
+    for(let i=0;i<81;i++){
+      const v = state.values[i];
+      if(v === 0) continue;
+      for(const p of peersOf(i)){
+        if(state.values[p] === v){
+          conflicts.add(i);
+          conflicts.add(p);
+        }
+      }
+    }
+    return conflicts;
+  }
+
+  // --- Interaction
+  function selectCell(i){
+    state.selected = i;
+    render();
+  }
+
+  function setActiveNumber(n){
+    state.activeNumber = n;
+    render();
+  }
+
+  function getHighlightNumber(){
+    if(state.activeNumber > 0) return state.activeNumber;
+    if(state.selected >= 0){
+      const v = state.values[state.selected];
+      if(v > 0) return v;
+    }
+    return 0;
+  }
+
+  function applyNumberToSelected(n){
+    if(state.selected < 0) return;
+    const i = state.selected;
+    if(state.given[i]) return;
+
+    const before = state.values[i];
+    state.values[i] = n;
+
+    // Fallo solo cuando introduces un valor (no al borrar) y el valor genera conflicto inmediato.
+    if(n !== 0 && n !== before){
+      const conflictPeers = getConflictPeers(i, n);
+      if(conflictPeers.length){
+        state.mistakes += 1;
+        flashCells([i, ...conflictPeers]);
+      } else {
+        popCell(i);
+      }
+    }
+
+    // Guardado automático
+    scheduleCheckpointSave();
+
+    render();
+  }
+
+  function hasImmediateDuplicate(i, v){
+    for(const p of peersOf(i)){
+      if(state.values[p] === v) return true;
+    }
+    return false;
+  }
+
+  function flashCells(indices){
+    const uniq = [...new Set(indices)].filter(n => Number.isFinite(n));
+    for(const i of uniq){
+      const el = els.board.querySelector(`.cell[data-i="${i}"]`);
+      if(!el) continue;
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+      el.addEventListener('animationend', () => el.classList.remove('flash'), { once: true });
+    }
+  }
+
+  function popCell(i){
+    const el = els.board.querySelector(`.cell[data-i="${i}"]`);
+    if(!el) return;
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+    el.addEventListener('animationend', () => el.classList.remove('pop'), { once: true });
+  }
+
+  function getConflictPeers(i, v){
+    if(!v) return [];
+    const peers = [];
+    for(const p of peersOf(i)){
+      if(state.values[p] === v) peers.push(p);
+    }
+    return peers;
+  }
+
+  function checkSolved(){
+    // Resuelto si: todo relleno y cada fila/col/box contiene 1..9 sin duplicados.
+    if(state.values.some(v => v === 0)) return false;
+    const okUnit = (arr) => {
+      const s = new Set(arr);
+      if(s.size !== 9) return false;
+      for(let n=1;n<=9;n++) if(!s.has(n)) return false;
+      return true;
+    };
+
+    // Filas
+    for(let r=0;r<9;r++){
+      const row = [];
+      for(let c=0;c<9;c++) row.push(state.values[idxRC(r,c)]);
+      if(!okUnit(row)) return false;
+    }
+
+    // Columnas
+    for(let c=0;c<9;c++){
+      const col = [];
+      for(let r=0;r<9;r++) col.push(state.values[idxRC(r,c)]);
+      if(!okUnit(col)) return false;
+    }
+
+    // Cajas 3x3
+    for(let br=0;br<3;br++){
+      for(let bc=0;bc<3;bc++){
+        const box = [];
+        for(let r=br*3;r<br*3+3;r++){
+          for(let c=bc*3;c<bc*3+3;c++) box.push(state.values[idxRC(r,c)]);
+        }
+        if(!okUnit(box)) return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Keyboard input
+  window.addEventListener('keydown', (e) => {
+    const key = e.key;
+
+    if(key === 'Escape'){
+      state.selected = -1;
+      setActiveNumber(0);
+      render();
+      return;
+    }
+
+    if(state.selected < 0) return;
+
+    if(key >= '1' && key <= '9'){
+      const n = Number(key);
+      setActiveNumber(n);
+      applyNumberToSelected(n);
+      return;
+    }
+
+    if(key === 'Backspace' || key === 'Delete' || key === '0'){
+      applyNumberToSelected(0);
+      return;
+    }
+
+    // Quick navigation (optional)
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)){
+      e.preventDefault();
+      const [r,c] = rcFromIdx(state.selected);
+      let nr=r, nc=c;
+      if(key==='ArrowUp') nr = Math.max(0, r-1);
+      if(key==='ArrowDown') nr = Math.min(8, r+1);
+      if(key==='ArrowLeft') nc = Math.max(0, c-1);
+      if(key==='ArrowRight') nc = Math.min(8, c+1);
+      selectCell(idxRC(nr,nc));
+    }
+  });
+
+  // --- Game lifecycle
+  function applyValuesString(valuesStr){
+    // Aplica valores (81 dígitos) solo en no-given.
+    if(typeof valuesStr !== 'string' || valuesStr.length !== 81) return;
+    for(let i=0;i<81;i++){
+      if(state.given[i]) continue;
+      const d = Number(valuesStr[i]);
+      state.values[i] = Number.isFinite(d) ? d : 0;
+    }
+  }
+
+  function loadPuzzleFromSeed(difficulty, seed, puzzleIndexOverride = null, puzzleOverride = null){
+    const list = PUZZLES[difficulty] || PUZZLES.easy;
+    const idx = (puzzleIndexOverride == null) ? seedToIndex(seed, list.length) : Math.max(0, Math.min(list.length - 1, puzzleIndexOverride));
+    const pick = puzzleOverride ? { puzzle: puzzleOverride } : list[idx];
+
+    state.difficulty = difficulty;
+    els.difficulty.value = difficulty;
+    state.seed = (seed >>> 0);
+    state.puzzleIndex = idx;
+    state.puzzle = pick.puzzle;
+
+    state.given = new Array(81).fill(false);
+    state.values = new Array(81).fill(0);
+    state.selected = -1;
+    state.activeNumber = 0;
+    state.mistakes = 0;
+    state.solved = false;
+
+    for(let i=0;i<81;i++){
+      const d = Number(state.puzzle[i]);
+      if(d !== 0){
+        state.given[i] = true;
+        state.values[i] = d;
+      }
+    }
+
+    // Timer + autosave
+    resetTimer(0);
+    scheduleCheckpointSave();
+
+    render();
+  }
+
+  function loadRandomPuzzle(difficulty){
+    const seed = randomSeed();
+    loadPuzzleFromSeed(difficulty, seed);
+  }
+
+  function resetToOriginal(){
+    if(!state.puzzle) return;
+
+    state.values = new Array(81).fill(0);
+    state.given = new Array(81).fill(false);
+
+    for(let i=0;i<81;i++){
+      const d = Number(state.puzzle[i]);
+      if(d !== 0){
+        state.given[i] = true;
+        state.values[i] = d;
+      }
+    }
+
+    state.selected = -1;
+    state.activeNumber = 0;
+    state.mistakes = 0;
+    state.solved = false;
+
+    resetTimer(0);
+    scheduleCheckpointSave();
+
+    render();
+  }
+
+  // --- Wire up
+  els.newGame.addEventListener('click', () => loadRandomPuzzle(els.difficulty.value));
+  els.reset.addEventListener('click', resetToOriginal);
+
+  els.difficulty.addEventListener('change', () => {
+    loadRandomPuzzle(els.difficulty.value);
+  });
+
+  els.share.addEventListener('click', async () => {
+    const newHash = encodeHash();
+    // No recargar la página: solo actualizar la URL
+    try{ history.replaceState(null, '', newHash); } catch { location.hash = newHash; }
+
+    const ok = await copyToClipboard(location.href);
+    const prev = els.share.textContent;
+    els.share.textContent = ok ? 'Copiado ✓' : 'No se pudo copiar';
+    setTimeout(() => { els.share.textContent = prev; }, 900);
+  });
+
+  // Init
+  buildBoard();
+  buildKeypad();
+
+  // Preferencia: URL compartida > checkpoint local > nueva partida
+  const loaded = loadFromUrl() || loadCheckpoint();
+  if(!loaded){
+    loadRandomPuzzle('easy');
+  }
+
+  startTimer();
+})();
+</script>
+</body>
+</html>
