@@ -177,6 +177,7 @@
     .cell.conflict{ background: rgba(239,68,68,.10); color: #991b1b; }
     .cell.wrong{ background: rgba(239,68,68,.07); color: #991b1b; }
     .cell.conflict-peer{ box-shadow: inset 0 0 0 2px rgba(239,68,68,.28); }
+    .cell.temp-error{ background: rgba(239,68,68,.12); color: #991b1b; }
 
     .cell .mini{
       position:absolute;
@@ -449,7 +450,7 @@
           • El error se marca en rojo de forma breve si el movimiento es incorrecto.
         </div>
 
-        <div id="winToast" class="toast">✅ Sudoku completado. ¡Perfecto!</div>
+        <div id="winToast" class="toast">Toma ya Majo! 🎉</div>
       </div>
     </div>
 
@@ -458,7 +459,7 @@
   <div id="winScreen" class="win-screen" aria-hidden="true">
     <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
       <div class="win-badge">🎉</div>
-      <h2 id="winTitle">¡Sudoku completado!</h2>
+      <h2 id="winTitle">Toma ya Majo! 🎉</h2>
       <div class="win-stats">
         <span>Tiempo: <strong id="winTime">00:00</strong></span>
         <span>Fallos: <strong id="winMistakes">0</strong></span>
@@ -562,6 +563,7 @@
 
   let timerInterval = null;
   let saveTimer = null;
+  const tempErrorTimers = new Array(81).fill(null);
 
   let state = {
     difficulty: 'easy',
@@ -1014,6 +1016,36 @@
     }
   }
 
+  function showTempError(indices, duration = 1000){
+    const uniq = [...new Set(indices)].filter(n => Number.isFinite(n));
+    for(const i of uniq){
+      const el = els.board.querySelector(`.cell[data-i="${i}"]`);
+      if(!el) continue;
+      el.classList.add('temp-error');
+      if(tempErrorTimers[i]){
+        clearTimeout(tempErrorTimers[i]);
+      }
+      tempErrorTimers[i] = setTimeout(() => {
+        el.classList.remove('temp-error');
+        tempErrorTimers[i] = null;
+      }, duration);
+    }
+  }
+
+  function scheduleErrorClear(i, expectedValue){
+    const puzzleKey = state.puzzle;
+    setTimeout(() => {
+      if(state.puzzle !== puzzleKey) return;
+      if(state.given[i]) return;
+      if(state.values[i] !== expectedValue) return;
+      state.values[i] = 0;
+      state.lastMove = -1;
+      recomputeWrongMarks();
+      scheduleCheckpointSave();
+      render();
+    }, 1000);
+  }
+
   function popCell(i){
     const el = els.board.querySelector(`.cell[data-i="${i}"]`);
     if(!el) return;
@@ -1059,9 +1091,13 @@
         if(conflictPeers.length || isWrong){
           state.mistakes += 1;
           flashCells([i, ...conflictPeers]);
+          showTempError([i, ...conflictPeers], 1000);
+          scheduleErrorClear(i, n);
         } else {
           popCell(i);
         }
+        state.selected = -1;
+        state.activeLocked = false;
       }
     }
 
@@ -1275,6 +1311,14 @@
   // --- Game lifecycle (elige SIEMPRE puzzle con solución única)
   function loadPuzzleFromSeed(difficulty, seed, puzzleIndexOverride = null, puzzleOverride = null){
     hideWinScreen();
+    for(let i=0;i<tempErrorTimers.length;i++){
+      if(tempErrorTimers[i]){
+        clearTimeout(tempErrorTimers[i]);
+        tempErrorTimers[i] = null;
+      }
+      const el = els.board.querySelector(`.cell[data-i="${i}"]`);
+      if(el) el.classList.remove('temp-error');
+    }
     const list = (PUZZLES[difficulty] && PUZZLES[difficulty].length) ? PUZZLES[difficulty] : PUZZLES.easy;
     let idx = (puzzleIndexOverride == null)
       ? seedToIndex(seed, list.length)
@@ -1381,6 +1425,14 @@
   function resetToOriginal(){
     if(!state.puzzle) return;
     hideWinScreen();
+    for(let i=0;i<tempErrorTimers.length;i++){
+      if(tempErrorTimers[i]){
+        clearTimeout(tempErrorTimers[i]);
+        tempErrorTimers[i] = null;
+      }
+      const el = els.board.querySelector(`.cell[data-i="${i}"]`);
+      if(el) el.classList.remove('temp-error');
+    }
 
     state.values = new Array(81).fill(0);
     state.given = new Array(81).fill(false);
